@@ -1,0 +1,83 @@
+#!/bin/bash
+
+#sndup by Storm Dragon
+#License: WTFPL http://wtfpl.net/
+#This script makes uploading audio to the http://sndup.net/ sound service from both the console and X simple.
+#Requires curl and optionally zenity and xclip
+
+showInfoUrl="true"
+
+display_info()
+{
+    if [ "$showInfoUrl" == "true" ] ; then
+        message="Information URL: $1\nDownload URL: $2"
+    else
+        message="$2"
+    fi
+    if [[ -n $COLORTERM ]] ; then
+        zenity --info --text="$message"
+        if hash xclip &> /dev/null ; then
+            echo -n "$2" | xclip -selection clipboard
+        fi
+    else
+        echo -e "$message"
+    fi
+    exit 0
+}
+
+error()
+{
+    if [[ -n $COLORTERM ]] ; then
+        zenity --error --text="$1"
+    else
+        echo -e "Error: $1"
+    fi
+    exit 1
+}
+
+get_file_urls()
+{
+    filePath="$1"
+    upload="$(curl -s --form file=@$filePath --form submit=upload http://sndup.net/post.php)"
+    jsonInfo="$(echo "$upload" | sed 's/,/\n/g')"
+    fileInfoUrl="$(echo "$jsonInfo" | grep 'url' | sed 's/^{"url":"//' | tr -d '"\\')"
+    fileDownloadUrl="$(echo "$fileInfoUrl" | sed 's/a$/d/')"
+    errorCode="$(echo "$jsonInfo" | grep '"error":' | tr -Cd "[:digit:]")"
+    display_info "$fileInfoUrl" "$fileDownloadUrl" "$errorCode"
+}
+
+#If in X and opened with no args, open a file selection dialog with zenity
+if [ $# -eq 0 ] ; then
+    if [[ -n $COLORTERM ]] ; then
+    fileName="$(zenity --file-selection)"
+        fi
+    if [ -n "$fileName" ] ; then
+        get_file_urls "$fileName"
+    else
+        error "No file selected."
+    fi
+fi
+
+if [ $# -gt 2 ] ; then
+    error "Too many arguments. This script requires between 0 to 2 arguments. Optionall -d --download-url, optional -i --info-url, or, if you are using X, opened with no arguments, a file selction dialog will be displayed."
+fi
+
+#deal with command line args before the file path
+if [ $# -eq 2 -a -f "$2" ] ; then
+    if [[ "$1" == "-d" || "$1" == "--download-url" ]] ; then
+        showInfoUrl="false"
+    else
+        error "Invalid argument. Arguments may be -d --download-url follow by the file path for the download url or the file path with no other arguments."
+    fi
+    get_file_urls "$2"
+else
+    error "File does not exist."
+fi
+
+#if there's a single arg that is a file, upload it and show the info
+if [ $# -eq 1 -a -f "$1" ] ; then
+    get_file_urls "$1"
+else
+    error "No file to uploade."
+fi
+exit 0
