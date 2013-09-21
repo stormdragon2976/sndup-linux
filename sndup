@@ -5,7 +5,10 @@
 #This script makes uploading audio to the http://sndup.net/ sound service from both the console and X simple.
 #Requires curl and optionally zenity and xclip
 
+shareAdn="FALSE"
+shareFacebook="FALSE"
 showInfoUrl="true"
+shareTwitter="FALSE"
 
 display_info()
 {
@@ -15,20 +18,26 @@ display_info()
         message="$2"
     fi
     if [[ -n $COLORTERM ]] ; then
-        zenity --info --text="$message"
+        result="$(yad --form --title="SndUp URL Information" --selectable-labels --show-uri --field="$message:lbl" --field="Share With App.net:chk" --field="Share With Facebook:chk" --field="Share with Twitter:chk")"
+shareAdn="$(echo "$result" | cut -d '|' -f2)"
+shareFacebook="$(echo "$result" | cut -d '|' -f3)"
+shareTwitter="$(echo "$result" | cut -d '|' -f4)"
         if hash xclip &> /dev/null ; then
             echo -n "$2" | xclip -selection clipboard
         fi
     else
         echo -e "$message"
     fi
+if [ "$shareAdn" == "TRUE" -o "$shareFacebook" == "TRUE" -o "$shareTwitter" == "TRUE" ] ; then
+post_url $shareAdn $shareFacebook $shareTwitter $2
+fi
     exit 0
 }
 
 error()
 {
     if [[ -n $COLORTERM ]] ; then
-        zenity --error --text="$1"
+        yad --text-info --title="SndUp Error" --text="$1"
     else
         echo -e "Error: $1"
     fi
@@ -46,10 +55,48 @@ get_file_urls()
     display_info "$fileInfoUrl" "$fileDownloadUrl" "$errorCode"
 }
 
-#If in X and opened with no args, open a file selection dialog with zenity
+post_url()
+{
+    if [[ -n $COLORTERM ]] ; then
+postText="$(yad --form --title="SndUp Post RUL" --selectable-labels --field="Enter text to post with your link. Remember App.net has a 256 character limit and Twitter has a 140 character limit.:lbl" --field="$downloadUrl:txt")"
+else
+read -p "Enter text to post with your link. Remember App.net has a 256 character limit and Twitter has a 140 character limit: " postText
+fi
+if [ "$1" == "TRUE" ] ; then
+texapp -readline=0 -silent -status="$postText $4"
+if [ $? -ne 0 ] ; then
+postResults="App.net: failed\n"
+else
+postResults="App.net: succeeded\n"
+fi
+fi
+if [ "$2" == "TRUE" ] ; then
+fbcmd post "$postText" 'SndUp | A simple audio sharing service!' "$4"
+if [ $? -ne 0 ] ; then
+postResults="${postResults}Facebook: failed\n"
+else
+postResults="${postResults}Facebook: succeeded\n"
+fi
+fi
+if [ "$3" == "TRUE" ] ; then
+ttytter -readline=0 -silent -status="$postText $4"
+if [ $? -ne 0 ] ; then
+postResults="${postResults}Twitter: failed\n"
+else
+postResults="${postResults}Twitter: succeeded\n"
+fi
+fi
+    if [[ -n $COLORTERM ]] ; then
+yad --form --title="SndUp Post URL Results" --selectable-labels --field="Results:$postResults:lbl"
+else
+echo -e "Results:\n\n$postResults"
+fi
+}
+
+#If in X and opened with no args, open a file selection dialog with yad
 if [ $# -eq 0 ] ; then
     if [[ -n $COLORTERM ]] ; then
-    fileName="$(zenity --file-selection)"
+    fileName="$(yad --file-selection --title="Select Audio File to Upload to sndup.net")"
         fi
     if [ -n "$fileName" ] ; then
         get_file_urls "$fileName"
@@ -58,26 +105,35 @@ if [ $# -eq 0 ] ; then
     fi
 fi
 
-if [ $# -gt 2 ] ; then
-    error "Too many arguments. This script requires between 0 to 2 arguments. Optionall -d --download-url, optional -i --info-url, or, if you are using X, opened with no arguments, a file selction dialog will be displayed."
+if [ $# -gt 4 ] ; then
+    error "Too many arguments. This script requires between 0 and 4 arguments. Optional arguments are:\n-d --download-url: download url only with no other text.\n-f --facebook: Post the url to facebook using fbcmd.\n-i --info-url: Information page with no other text.\nIf you are using X, opened with no arguments, a file selection dialog will be displayed."
 fi
 
-#deal with command line args before the file path
-if [ $# -eq 2 -a -f "$2" ] ; then
-    if [[ "$1" == "-d" || "$1" == "--download-url" ]] ; then
+while [ $# -gt 1 ] ; do
+case "$1" in
+"-a"|"--adn")
+shareTwitter="true"
+;;
+"-d"|"--download-url")
         showInfoUrl="false"
-    else
-        error "Invalid argument. Arguments may be -d --download-url follow by the file path for the download url or the file path with no other arguments."
-    fi
-    get_file_urls "$2"
-else
-    error "File does not exist."
-fi
+;;
+"-f"|"--facebook")
+shareFacebook="true"
+;;
+"-t"|"--twitter")
+shareTwitter="true"
+;;
+*)
+error "Invalid argument... Valid options are:\n-a --adn: post link to app.net using Texapp.\n-d --download: return download link only, no other text.\n-f --facebook: Post to facebook using fbcmd.\n-t --twitter: Post to twitter using TTYtter."
+esac
+shift
+done
 
-#if there's a single arg that is a file, upload it and show the info
-if [ $# -eq 1 -a -f "$1" ] ; then
+#If file exists, upload it and show the info.
+if [ -f "$1" ] ; then
     get_file_urls "$1"
 else
     error "No file to uploade."
 fi
+
 exit 0
