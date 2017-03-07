@@ -2,7 +2,7 @@
 
 #sndup by Storm Dragon
 #License: WTFPL http://wtfpl.net/
-#This script makes uploading audio to the http://sndup.net/ sound service from both the console and X simple.
+#This script makes uploading audio to the http://www.sndup.net/ sound service from both the console and X simple.
 #Requires curl and optionally zenity and xclip
 
 shareAdn="FALSE"
@@ -47,7 +47,7 @@ error()
 get_file_urls()
 {
     filePath="$1"
-    upload="$(curl -s --form file="@$filePath" --form submit=upload http://sndup.net/post.php)"
+    upload="$(curl -s --form file="@$filePath" --form submit=upload http://www.sndup.net/post.php)"
     jsonInfo="$(echo "$upload" | sed 's/,/\n/g')"
     fileInfoUrl="$(echo "$jsonInfo" | grep 'url' | sed 's/^{"url":"//' | tr -d '"\\')"
     fileDownloadUrl="$(echo "$fileInfoUrl" | sed 's/a$/d/')"
